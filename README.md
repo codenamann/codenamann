@@ -1,5 +1,5 @@
 # Hi, I'm Naman Tiwari 💫
-<br>🔵 A passionate Frontend Developer & Java Enthusiast from India 🇮🇳  <br>🟢 I craft responsive UIs, solve real-world problems, and juggle Java, DSA, and full stack dev like a pro-in-progress.  <br>🟣 Currently building projects, breaking stuff (intentionally 😅), and prepping for product-based greatness 🚀<br>
+<br>🔵 A passionate Full Stack Developer & Java Enthusiast from India 🇮🇳  <br>🟢 I craft responsive UIs, solve real-world problems, and juggle Java, DSA, and full stack dev like a pro-in-progress.  <br>🟣 Currently building projects, breaking stuff (intentionally 😅), and prepping for product-based greatness 🚀<br>
 
 
 ## 🌐 Socials:
