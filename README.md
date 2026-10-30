@@ -29,9 +29,9 @@
 
 <h3><code>codenamann@github ~ $ ./links.sh</code></h3>
 
-<p><b>Fullstack Developer · Java Enthusiast · Problem Solver</b></p>
+<p><b>Full-Stack Developer · Java Enthusiast · Problem Solver</b></p>
 
-[![Portfolio](https://img.shields.io/badge/Portfolio-codenaman.vercel.app-0d1117?style=for-the-badge&logo=netlify&logoColor=white)](https://codenaman.netlify.app) [![LinkedIn](https://img.shields.io/badge/LinkedIn-codenaman-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/codenaman) [![Email](https://img.shields.io/badge/Email-namantiwari.dev@gmail.com-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:namantiwari.dev@gmail.com) [![GitHub](https://img.shields.io/badge/GitHub-codenamann-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/codenamann)
+[![Portfolio](https://img.shields.io/badge/Portfolio-codenaman.vercel.app-0d1117?style=for-the-badge&logo=vercel&logoColor=black)](https://codenaman.vercel.app) [![LinkedIn](https://img.shields.io/badge/LinkedIn-codenaman-0A66C2?style=for-the-badge&logo=linkedin&logoColor=blue)](https://linkedin.com/in/codenaman) [![Email](https://img.shields.io/badge/Email-namantiwari.dev@gmail.com-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:namantiwari.dev@gmail.com) [![GitHub](https://img.shields.io/badge/GitHub-codenamann-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/codenamann)
 
 <br>
 
