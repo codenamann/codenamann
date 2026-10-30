@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="490" height="454" viewBox="0 0 490 454" role="img" aria-labelledby="title desc">
+  <title id="title">Codenaman Developer Info Card</title>
+  <desc id="desc">Neofetch-style terminal info card showcasing role, tech stack, and highlights.</desc>
+  <rect width="490" height="454" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>
+  <rect width="490" height="34" rx="10" fill="#161b22"/>
+  <rect y="24" width="490" height="10" fill="#161b22"/>
+  <circle cx="20" cy="17" r="5" fill="#ff5f56"/>
+  <circle cx="38" cy="17" r="5" fill="#ffbd2e"/>
+  <circle cx="56" cy="17" r="5" fill="#27c93f"/>
+  <text x="245" y="21" text-anchor="middle" fill="#8b949e" font-size="11">codenamann — neofetch</text>
+
+  <style>
+    text { font-family: ui-monospace, SFMono-Regular, "Segoe UI", Menlo, Consolas, monospace; }
+    .row { opacity: 0; animation: fade 0.35s ease-out forwards; }
+    @keyframes fade { to { opacity: 1; } }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    .cursor { animation: blink 0.9s infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .row { animation: none; opacity: 1; }
+      .cursor { animation: none; opacity: 1; }
+    }
+  </style>
+
+  <!-- Header Banner -->
+  <g class="row" style="animation-delay:0.15s">
+    <text x="24" y="68" fill="#39d353" font-size="20" font-weight="700">CODENAMAN</text>
+    <text x="24" y="88" fill="#8b949e" font-size="11">Full Stack Developer  ·  India 🇮🇳</text>
+    <line x1="24" y1="102" x2="466" y2="102" stroke="#21262d" stroke-width="1"/>
+  </g>
+
+  <!-- Profile Section -->
+  <g class="row" style="animation-delay:0.35s">
+    <text x="24" y="124" fill="#79c0ff" font-size="11" font-weight="600">ABOUT / PROFILE</text>
+    <text x="24" y="146" fill="#8b949e" font-size="11">Role</text>
+    <text x="135" y="146" fill="#e6edf3" font-size="11">Full Stack Developer &amp; Java Enthusiast</text>
+
+    <text x="24" y="168" fill="#8b949e" font-size="11">Focus</text>
+    <text x="135" y="168" fill="#e6edf3" font-size="11">Full Stack Web  ·  Java  ·  DSA</text>
+
+    <text x="24" y="190" fill="#8b949e" font-size="11">Status</text>
+    <text x="135" y="190" fill="#e6edf3" font-size="11">Building real products &amp; breaking stuff 🚀</text>
+  </g>
+
+  <!-- Tech Stack Section -->
+  <g class="row" style="animation-delay:0.55s">
+    <text x="24" y="226" fill="#79c0ff" font-size="11" font-weight="600">TECH STACK</text>
+
+    <text x="24" y="248" fill="#8b949e" font-size="11">Core</text>
+    <text x="135" y="248" fill="#e6edf3" font-size="11">Java  ·  JavaScript  ·  HTML5  ·  CSS3</text>
+
+    <text x="24" y="270" fill="#8b949e" font-size="11">Frontend</text>
+    <text x="135" y="270" fill="#e6edf3" font-size="11">React  ·  Next.js  ·  Tailwind CSS  ·  Vite</text>
+
+    <text x="24" y="292" fill="#8b949e" font-size="11">Backend</text>
+    <text x="135" y="292" fill="#e6edf3" font-size="11">Node.js  ·  Express.js  ·  REST APIs</text>
+
+    <text x="24" y="314" fill="#8b949e" font-size="11">Database</text>
+    <text x="135" y="314" fill="#e6edf3" font-size="11">MongoDB  ·  MySQL</text>
+
+    <text x="24" y="336" fill="#8b949e" font-size="11">Tools</text>
+    <text x="135" y="336" fill="#e6edf3" font-size="11">Git  ·  GitHub  ·  Vercel  ·  Figma</text>
+  </g>
+
+  <!-- Highlights & Links -->
+  <g class="row" style="animation-delay:0.75s">
+    <text x="24" y="372" fill="#79c0ff" font-size="11" font-weight="600">HIGHLIGHTS</text>
+    <text x="24" y="392" fill="#d2a8ff" font-size="11">▸</text>
+    <text x="42" y="392" fill="#e6edf3" font-size="11">BloodWeb — Real-time blood donation platform</text>
+    <text x="24" y="410" fill="#d2a8ff" font-size="11">▸</text>
+    <text x="42" y="410" fill="#e6edf3" font-size="11">Portfolio: <tspan fill="#58a6ff">codenaman.netlify.app</tspan></text>
+  </g>
+
+  <!-- Footer Shell Prompt -->
+  <text x="24" y="434" fill="#39d353" font-size="11" font-weight="600">
+    $ echo "Turning coffee into code"<tspan class="cursor" fill="#39d353"> █</tspan>
+  </text>
+</svg>

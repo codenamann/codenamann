@@ -1,0 +1,12 @@
+# Python virtual environment & cache
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Scratch and OS files
+.DS_Store
+Thumbs.db
+test_prepped.png
