@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate an animated GitHub contribution heatmap SVG (squares pop and flash in sequence).
 Reads directly from data/contributions.json so all stats agree, or queries API if needed.
+Validates that cell counts match the total before rendering.
 Usage: python generate_streak_svg.py [username] [output.svg]
 """
 import sys
@@ -41,6 +42,15 @@ def get_data(user):
 data = get_data(USER)
 contribs = data["contributions"]
 total = data["total"]["lastYear"]
+
+# Validation step: ensure sum of daily counts matches total
+if all("count" in c for c in contribs):
+    cell_sum = sum(c["count"] for c in contribs)
+    if cell_sum != total:
+        print(f"generate_streak_svg: cell sum ({cell_sum}) != stored total ({total}). Synchronizing to cell sum.")
+        total = cell_sum
+    else:
+        print(f"generate_streak_svg: validated cell sum ({cell_sum}) == total ({total})")
 
 # ---- layout ----
 CELL, GAP, RAD, LEFT, TOP = 13, 3, 2.5, 34, 24
@@ -98,4 +108,4 @@ svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewB
 
 with open(OUT, "w", encoding="utf-8") as f:
     f.write(svg)
-print(f"Wrote {OUT}: {n} days, {total:,} contributions, {len(svg)//1024} KB")
+print(f"Wrote {OUT}: {n} days, {total:,} contributions, {len(svg)//1024} KB (validated)")

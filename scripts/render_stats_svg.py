@@ -66,6 +66,17 @@ def span(s):
 
 
 data = json.load(open(SRC, encoding="utf-8"))
+
+# Validation step: confirm stored aggregate matches daily and monthly sums
+daily_sum = sum(d["count"] for d in data.get("days", []))
+monthly_sum = sum(m["total"] for m in data.get("monthly", []))
+total_contrib = data.get("total_contributions", 0)
+
+if daily_sum != total_contrib:
+    raise ValueError(f"render_stats_svg validation error: daily sum ({daily_sum}) != total_contributions ({total_contrib})")
+if monthly_sum != total_contrib:
+    raise ValueError(f"render_stats_svg validation error: monthly sum ({monthly_sum}) != total_contributions ({total_contrib})")
+
 cur, lng, best = data["current_streak"], data["longest_streak"], data["best_day"]
 n_days = len(data["days"]) or 365
 
@@ -73,7 +84,7 @@ n_days = len(data["days"]) or 365
 tiles = [
     ("current streak", cur["length"], " days", span(cur), GREEN),
     ("longest streak", lng["length"], " days", span(lng), INK),
-    ("contributions", data["total_contributions"], "", "in the last year", INK),
+    ("contributions", total_contrib, "", "in the last year", INK),
     ("active days", data["active_days"], f" / {n_days}", f'{data["active_days"] / n_days:.0%} of the year', INK),
     ("best day", best["count"], "", short(best["date"]), INK),
     ("avg / active day", data["avg_per_active_day"], "", "contributions", INK),
@@ -173,4 +184,4 @@ parts.append('</svg>')
 svg = "".join(parts)
 with open(OUT, "w", encoding="utf-8") as f:
     f.write(svg)
-print(f"wrote {OUT}: {W} x {H}, {len(svg)//1024} KB")
+print(f"wrote {OUT}: {W} x {H}, {len(svg)//1024} KB (validated total: {total_contrib:,})")

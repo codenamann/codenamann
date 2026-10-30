@@ -4,6 +4,7 @@ Fetch real daily contribution counts for codenamann:
 - Supports GitHub GraphQL API (including private contributions if token present)
 - Falls back to public unauthenticated contributions scraping
 - Computes streaks (current & longest), active days, best day, and monthly totals
+- Validates that daily sum, monthly totals, and total_contributions match exactly
 - Writes data/contributions.json for render_stats_svg.py and generate_streak_svg.py
 """
 import datetime
@@ -165,6 +166,15 @@ def build_data(days):
         key = d["date"][:7]
         monthly[key] = monthly.get(key, 0) + d["count"]
     monthly_list = [{"month": k, "total": v} for k, v in sorted(monthly.items())]
+
+    # VALIDATION STEP: Verify daily sum and monthly sum match total_contributions exactly
+    daily_sum = sum(d["count"] for d in days)
+    monthly_sum = sum(m["total"] for m in monthly_list)
+    if daily_sum != total:
+        raise ValueError(f"Validation failed: daily sum ({daily_sum}) != total ({total})")
+    if monthly_sum != total:
+        raise ValueError(f"Validation failed: monthly sum ({monthly_sum}) != total ({total})")
+    print(f"Validation passed: daily sum ({daily_sum}) == monthly sum ({monthly_sum}) == total ({total})")
 
     return {
         "username": USERNAME,
