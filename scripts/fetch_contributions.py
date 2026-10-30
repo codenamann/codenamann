@@ -1,18 +1,24 @@
-from __future__ import annotations
-
+#!/usr/bin/env python3
+"""
+Fetch real daily contribution counts for codenamann:
+- Supports GitHub GraphQL API (including private contributions if token present)
+- Falls back to public unauthenticated contributions scraping
+- Computes streaks (current & longest), active days, best day, and monthly totals
+- Writes data/contributions.json for render_stats_svg.py and generate_streak_svg.py
+"""
+import datetime
 import json
 import os
 import re
-from collections import Counter
-from datetime import datetime, timezone, timedelta
+import sys
 from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
 
-USERNAME = "codenamann"
+USERNAME = os.environ.get("GH_PROFILE_USER", "codenamann")
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "data" / "contributions.json"
+OUT_PATH = ROOT / "data" / "contributions.json"
 
 LEVEL_MAP = {
     "NONE": 0,
@@ -23,8 +29,7 @@ LEVEL_MAP = {
 }
 
 
-def fetch_contributions_graphql(token: str) -> list[dict] | None:
-    """Fetch all contributions (including private if token has repo scope) via GitHub GraphQL API."""
+def fetch_days_graphql(token: str):
     url = "https://api.github.com/graphql"
     headers = {
         "Authorization": f"Bearer {token}",
@@ -49,21 +54,19 @@ def fetch_contributions_graphql(token: str) -> list[dict] | None:
     }
     """
     try:
-        response = requests.post(
+        resp = requests.post(
             url,
             json={"query": query, "variables": {"login": USERNAME}},
             headers=headers,
             timeout=30,
         )
-        if response.status_code != 200:
-            print(f"GraphQL request failed with status {response.status_code}: {response.text[:200]}")
+        if resp.status_code != 200:
+            print(f"GraphQL request failed: {resp.status_code} {resp.text[:200]}", file=sys.stderr)
             return None
-
-        data = response.json()
+        data = resp.json()
         if "errors" in data:
-            print(f"GraphQL returned errors: {data['errors']}")
+            print(f"GraphQL returned errors: {data['errors']}", file=sys.stderr)
             return None
-
         cal = data.get("data", {}).get("user", {}).get("contributionsCollection", {}).get("contributionCalendar", {})
         weeks = cal.get("weeks", [])
         if not weeks:
@@ -74,119 +77,128 @@ def fetch_contributions_graphql(token: str) -> list[dict] | None:
             for day in week.get("contributionDays", []):
                 days.append({
                     "date": day["date"],
-                    "level": LEVEL_MAP.get(day["contributionLevel"], 0),
                     "count": int(day["contributionCount"]),
+                    "level": LEVEL_MAP.get(day["contributionLevel"], 0),
                 })
-        print(f"Successfully fetched {len(days)} days via GitHub GraphQL API (private repos included with authorized token).")
+        print(f"Fetched {len(days)} days via GitHub GraphQL API (authenticated).")
         return days
     except Exception as exc:
-        print(f"GraphQL fetch encountered an error: {exc}. Falling back to public scraper.")
+        print(f"GraphQL error: {exc}", file=sys.stderr)
         return None
 
 
-def fetch_contributions_public() -> list[dict]:
-    """Fetch public contributions calendar (which also includes private activity if enabled in GitHub profile settings)."""
+def fetch_days_public():
     url = f"https://github.com/users/{USERNAME}/contributions"
-    print(f"Fetching public contribution calendar from {url}...")
-    response = requests.get(
-        url,
-        headers={"User-Agent": "codenamann-profile-readme/1.0 (Mozilla/5.0)"},
-        timeout=30,
-    )
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
+    print(f"Scraping public contributions from {url}...")
+    resp = requests.get(url, headers={"User-Agent": "codenamann-profile-readme/1.0"}, timeout=30)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Map tooltip texts by target cell id
-    tooltips: dict[str, str] = {}
-    for tt in soup.find_all("tool-tip", attrs={"for": True}):
-        target_id = tt.get("for")
-        if target_id:
-            tooltips[target_id] = tt.get_text().strip()
+    cells = soup.select("td.ContributionCalendar-day")
+    if not cells:
+        print("No contribution calendar cells found.", file=sys.stderr)
+        sys.exit(1)
 
     days = []
-    for cell in soup.select("td.ContributionCalendar-day"):
-        date_str = cell.get("data-date")
-        if not date_str:
+    for td in cells:
+        date = td.get("data-date")
+        if not date:
             continue
+        td_id = td.get("id")
+        tooltip_el = soup.find("tool-tip", attrs={"for": td_id}) if td_id else None
+        text = tooltip_el.get_text(strip=True) if tooltip_el else ""
+        if re.search(r"no contributions", text, re.I):
+            count = 0
+        else:
+            m = re.match(r"(\d+)", text)
+            count = int(m.group(1)) if m else 0
+        days.append({"date": date, "count": count, "level": int(td.get("data-level") or 0)})
 
-        raw_level = cell.get("data-level", "0")
-        try:
-            level = max(0, min(4, int(raw_level)))
-        except ValueError:
-            level = 0
-
-        cell_id = cell.get("id", "")
-        label = tooltips.get(cell_id, "") or cell.get("aria-label", "") or ""
-        match = re.search(r"([\d,]+)\s+contributions?", label, re.I)
-        count = int(match.group(1).replace(",", "")) if match else (level if level > 0 else 0)
-        days.append({"date": date_str, "level": level, "count": count})
-
-    if not days:
-        raise RuntimeError("No contribution day cells were found in GitHub HTML.")
-
+    days.sort(key=lambda d: d["date"])
+    print(f"Scraped {len(days)} days from GitHub public calendar.")
     return days
 
 
-def main() -> None:
-    token = os.getenv("GH_PAT") or os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
-    days = None
-    if token:
-        print("GitHub token detected. Attempting to fetch via GraphQL API (includes private contributions)...")
-        days = fetch_contributions_graphql(token.strip())
+def compute_current_streak(days):
+    idx = len(days) - 1
+    if idx >= 0 and days[idx]["count"] == 0:
+        idx -= 1  # today isn't over yet
+    streak = 0
+    end_idx = idx
+    while idx >= 0 and days[idx]["count"] > 0:
+        streak += 1
+        idx -= 1
+    start_idx = idx + 1
+    if streak == 0:
+        return 0, None, None
+    return streak, days[start_idx]["date"], days[end_idx]["date"]
 
-    if not days:
-        days = fetch_contributions_public()
 
-    days.sort(key=lambda day: day["date"])
-    counts = [day["count"] for day in days]
-    active = [day for day in days if day["count"] > 0]
-    best_day = max(days, key=lambda day: day["count"]) if days else {"date": "", "count": 0}
-    total = sum(counts)
-
-    # Compute current streak
-    current_streak = 0
-    today = datetime.now(timezone.utc).date()
-    by_date = {day["date"]: day for day in days}
-    cursor = today
-    if cursor.isoformat() not in by_date or by_date[cursor.isoformat()]["count"] == 0:
-        cursor -= timedelta(days=1)
-
-    while cursor.isoformat() in by_date and by_date[cursor.isoformat()]["count"] > 0:
-        current_streak += 1
-        cursor -= timedelta(days=1)
-
-    longest_streak = 0
-    running = 0
-    previous = None
-    for day in days:
-        date_val = datetime.strptime(day["date"], "%Y-%m-%d").date()
-        if day["count"] > 0:
-            running = running + 1 if previous and (date_val - previous).days == 1 else 1
-            longest_streak = max(longest_streak, running)
-            previous = date_val
+def compute_longest_streak(days):
+    longest = run = 0
+    longest_start = longest_end = None
+    run_start_idx = None
+    for i, d in enumerate(days):
+        if d["count"] > 0:
+            if run == 0:
+                run_start_idx = i
+            run += 1
+            if run > longest:
+                longest = run
+                longest_start = days[run_start_idx]["date"]
+                longest_end = days[i]["date"]
         else:
-            running = 0
-            previous = date_val
+            run = 0
+    return longest, longest_start, longest_end
 
-    month_totals = Counter()
-    for day in days:
-        month_totals[day["date"][:7]] += day["count"]
 
-    payload = {
+def build_data(days):
+    days.sort(key=lambda d: d["date"])
+    total = sum(d["count"] for d in days)
+    active_days = sum(1 for d in days if d["count"] > 0)
+    best = max(days, key=lambda d: d["count"]) if days else {"date": "", "count": 0}
+    cur_len, cur_start, cur_end = compute_current_streak(days)
+    long_len, long_start, long_end = compute_longest_streak(days)
+
+    monthly = {}
+    for d in days:
+        key = d["date"][:7]
+        monthly[key] = monthly.get(key, 0) + d["count"]
+    monthly_list = [{"month": k, "total": v} for k, v in sorted(monthly.items())]
+
+    return {
         "username": USERNAME,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "range": {"start": days[0]["date"], "end": days[-1]["date"]} if days else {"start": "", "end": ""},
         "total_contributions": total,
-        "active_days": len(active),
-        "current_streak": current_streak,
-        "longest_streak": longest_streak,
-        "best_day": {"date": best_day["date"], "count": best_day["count"]},
-        "monthly_totals": dict(sorted(month_totals.items())),
+        "active_days": active_days,
+        "avg_per_active_day": round(total / active_days, 1) if active_days else 0,
+        "current_streak": {"length": cur_len, "start": cur_start, "end": cur_end},
+        "longest_streak": {"length": long_len, "start": long_start, "end": long_end},
+        "best_day": {"date": best["date"], "count": best["count"]},
+        "monthly": monthly_list,
         "days": days,
     }
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    print(f"Wrote {len(days)} days, {total:,} contributions, {current_streak}d streak to {OUT}")
+
+def main():
+    token = os.getenv("GH_PAT") or os.getenv("GH_TOKEN") or os.getenv("GITHUB_TOKEN")
+    days = None
+    if token:
+        print("GitHub token detected, querying GraphQL API...")
+        days = fetch_days_graphql(token.strip())
+
+    if not days:
+        days = fetch_days_public()
+
+    data = build_data(days)
+    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+    print(f"wrote {OUT_PATH}: {data['total_contributions']} contributions, "
+          f"current streak {data['current_streak']['length']}, "
+          f"longest streak {data['longest_streak']['length']}")
 
 
 if __name__ == "__main__":

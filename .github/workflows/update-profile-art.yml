@@ -1,9 +1,12 @@
 name: Update profile art
 
+# Refreshes the contribution graph + stats card SVGs daily from real data.
+# Runs daily, plus whenever you push to main, plus on-demand.
+
 on:
   schedule:
-    - cron: "17 6 * * *"   # ~06:17 UTC daily
-  workflow_dispatch:
+    - cron: "17 6 * * *"   # ~06:17 UTC every day
+  workflow_dispatch: {}
   push:
     branches: [main]
 
@@ -18,29 +21,31 @@ jobs:
   heatmap:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: scripts/requirements.txt
 
       - name: Install dependencies
-        run: python -m pip install requests==2.32.3 beautifulsoup4==4.12.3
+        run: pip install -r scripts/requirements.txt
 
-      - name: Fetch live contributions
+      - name: Fetch live contributions (GraphQL or public scraper)
         run: python scripts/fetch_contributions.py
         env:
+          GH_PROFILE_USER: codenamann
           GH_PAT: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
-      - name: Render contribution heatmap SVG
-        run: python scripts/render_heatmap_svg.py
+      - name: Render animated contribution graph SVG
+        run: python scripts/generate_streak_svg.py codenamann contrib-heatmap.svg
 
-      - name: Commit and push changes
+      - name: Render streak / numbers card
+        run: python scripts/render_stats_svg.py
+
+      - name: Commit updated art
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: refresh contribution graph [skip ci]"
-          file_pattern: "data/contributions.json contrib-heatmap.svg"
+          file_pattern: "data/contributions.json contrib-heatmap.svg stats.svg"

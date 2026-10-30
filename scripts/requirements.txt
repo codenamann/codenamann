@@ -1,8 +1,5 @@
-# Required by GitHub Actions scheduled workflow
-requests==2.32.3
-beautifulsoup4==4.12.3
-
-# Optional local portrait processing dependencies
+requests>=2.31.0
+beautifulsoup4>=4.12.0
 Pillow>=10.0.0
-numpy>=1.26.0
-opencv-python-headless>=4.9.0
+numpy>=1.24.0
+opencv-python-headless>=4.8.0

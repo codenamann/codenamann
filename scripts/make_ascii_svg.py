@@ -1,92 +1,145 @@
-from __future__ import annotations
+"""
+Convert a portrait photo into a clean, monochrome ASCII-art SVG
+that "types" itself in like a terminal, then holds.
 
-from pathlib import Path
-import cv2
-import numpy as np
-from PIL import Image
+Each row is revealed with a left-to-right clip wipe plus a small
+block cursor riding the wipe edge, staggered top -> bottom, so the whole
+portrait prints once and freezes.
+"""
+from PIL import Image, ImageEnhance, ImageFilter
+import html
+import os
+import sys
 
-ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "data" / "source-prepped.png"
-OUT = ROOT / "codenamann-ascii.svg"
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "source-prepped.png")
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "codenamann-ascii.svg")
 
-RAMP = " .`:-=+*cs#%@"
-COLS = 84
-ROWS = 52
+COLS = int(os.environ.get("COLS", 180))
+ART_W_TARGET = 800
+CELL_W = ART_W_TARGET / COLS
+CELL_H = CELL_W * 15 / 8
+ROWS = round(COLS * 8 / 15)
+RAMP = " .`:-=+*cs#%@"  # bright(sparse) -> dark(dense); leading space clears bg
 
+CONTRAST = 1.05
+BRIGHTNESS = 1.0
+GAMMA = 1.18          # >1 brightens mids -> face lands in sparser chars
+SHARPEN = False
+WHITE_FLOOR = 0.80    # luminance above this is forced to blank (space)
 
-def main() -> None:
-    if not SOURCE.exists():
-        raise SystemExit("Run scripts/prep_photo.py first to create data/source-prepped.png")
+PAD = 20
+TITLEBAR_H = 30
+STATUS_H = 30
+ART_W = COLS * CELL_W
+ART_H = ROWS * CELL_H
+CANVAS_W = ART_W + PAD * 2
+CANVAS_H = TITLEBAR_H + ART_H + STATUS_H + PAD
 
-    img = Image.open(SOURCE).convert("RGBA")
-    arr = np.array(img)
-    gray = arr[:, :, 0]
-    alpha = arr[:, :, 3]
+BG = "#0d1117"
+BG2 = "#111722"
+FRAME = "#30363d"
+TITLE_TEXT = "#7d8590"
+INK = "#c9d1d9"      # monochrome clean ink
+CURSOR = "#c9d1d9"
 
-    resized_gray = cv2.resize(gray, (COLS, ROWS), interpolation=cv2.INTER_AREA)
-    resized_alpha = cv2.resize(alpha, (COLS, ROWS), interpolation=cv2.INTER_AREA)
-    is_subject = resized_alpha > 25
+# ---- reveal timing (one-shot; a cursor rasters top -> bottom) -------------
+ROW_DUR = 5.8 / ROWS  # whole portrait prints in ~6s at any resolution
+STAGGER = ROW_DUR     # single cursor sweeping down
 
-    width = 370
-    height = 454
-    char_w = 4.22
-    row_h = 7.15
-    start_x = (width - int(COLS * char_w)) // 2 + 3
-    start_y = 46
+# ---- 1. sample the image into a COLS x ROWS grayscale grid ----------------
+im = Image.open(SRC).convert("L")
+if SHARPEN:
+    im = im.filter(ImageFilter.UnsharpMask(radius=2, percent=140, threshold=2))
+im = ImageEnhance.Brightness(im).enhance(BRIGHTNESS)
+im = ImageEnhance.Contrast(im).enhance(CONTRAST)
+im = im.resize((COLS, ROWS), Image.LANCZOS)
+px = im.load()
 
-    pieces = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
-        '  <title id="title">Animated ASCII Portrait of Codenaman</title>',
-        '  <desc id="desc">High-definition terminal ASCII art portrait auto-typing on load.</desc>',
-        '  <style>',
-        '    text { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }',
-        '    .ascii { font-size: 8.4px; font-weight: 600; fill: #c9d1d9; letter-spacing: -0.15px; }',
-        '    .row { opacity: 0; animation: type 0.1s steps(1, end) forwards; }',
-        '    @keyframes type { to { opacity: 1; } }',
-        '    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }',
-        '    .cursor { animation: blink 0.9s infinite; }',
-        '    @media (prefers-reduced-motion: reduce) {',
-        '      .row { animation: none; opacity: 1; }',
-        '      .cursor { animation: none; opacity: 1; }',
-        '    }',
-        '  </style>',
-        f'  <rect width="{width}" height="{height}" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="1"/>',
-        f'  <rect width="{width}" height="34" rx="10" fill="#161b22"/>',
-        f'  <rect y="24" width="{width}" height="10" fill="#161b22"/>',
-        '  <circle cx="20" cy="17" r="5" fill="#ff5f56"/>',
-        '  <circle cx="38" cy="17" r="5" fill="#ffbd2e"/>',
-        '  <circle cx="56" cy="17" r="5" fill="#27c93f"/>',
-        f'  <text x="{width // 2}" y="21" text-anchor="middle" fill="#8b949e" font-size="11">codenamann — portrait.ascii</text>',
-    ]
+STATIC = bool(os.environ.get("STATIC"))
 
-    for y in range(ROWS):
-        chars = []
-        for x in range(COLS):
-            if not is_subject[y, x]:
-                chars.append(" ")
-            else:
-                val = int(resized_gray[y, x])
-                # Map subject tone: 20..240 -> 1..12
-                idx = int((240 - val) / 220.0 * (len(RAMP) - 2)) + 1
-                chars.append(RAMP[max(1, min(len(RAMP) - 1, idx))])
+rows_txt = []
+for y in range(ROWS):
+    chars = []
+    for x in range(COLS):
+        lum = px[x, y] / 255.0
+        lum = pow(lum, GAMMA)
+        if lum >= WHITE_FLOOR:
+            chars.append(" ")
+            continue
+        idx = int((1.0 - lum) * (len(RAMP) - 1) + 0.5)
+        idx = max(0, min(len(RAMP) - 1, idx))
+        chars.append(RAMP[idx])
+    rows_txt.append("".join(chars))
 
-        line = "".join(chars).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        delay = y * 0.02
-        y_pos = start_y + (y + 1) * row_h
-        pieces.append(
-            f'  <text class="row ascii" style="animation-delay:{delay:.2f}s" '
-            f'x="{start_x}" y="{y_pos:.1f}" xml:space="preserve">{line}</text>'
-        )
+art_top = TITLEBAR_H + PAD * 0.35
 
-    pieces.append(
-        '  <text x="20" y="434" fill="#39d353" font-size="11" font-weight="600">'
-        '$ whoami<tspan class="cursor" fill="#39d353"> █</tspan></text>'
+# ---- 2. assemble SVG ------------------------------------------------------
+parts = []
+parts.append(
+    f'<svg xmlns="http://www.w3.org/2000/svg" width="{CANVAS_W:.1f}" height="{CANVAS_H:.1f}" '
+    f'viewBox="0 0 {CANVAS_W:.1f} {CANVAS_H:.1f}" font-family="ui-monospace, SFMono-Regular, '
+    f'Menlo, Consolas, monospace">'
+)
+parts.append('<defs>'
+             f'<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">'
+             f'<stop offset="0" stop-color="{BG2}"/><stop offset="1" stop-color="{BG}"/>'
+             f'</linearGradient></defs>')
+
+parts.append(f'<rect width="{CANVAS_W:.1f}" height="{CANVAS_H:.1f}" rx="12" fill="url(#bg)"/>')
+parts.append(f'<rect x="0.5" y="0.5" width="{CANVAS_W-1:.1f}" height="{CANVAS_H-1:.1f}" rx="12" '
+             f'fill="none" stroke="{FRAME}" stroke-width="1"/>')
+
+parts.append(f'<line x1="0" y1="{TITLEBAR_H}" x2="{CANVAS_W:.1f}" y2="{TITLEBAR_H}" stroke="{FRAME}"/>')
+for i, dotcol in enumerate(["#ff5f56", "#ffbd2e", "#27c93f"]):
+    parts.append(f'<circle cx="{PAD + i*16}" cy="{TITLEBAR_H/2}" r="5" fill="{dotcol}"/>')
+parts.append(f'<text x="{CANVAS_W/2:.1f}" y="{TITLEBAR_H/2 + 4}" fill="{TITLE_TEXT}" font-size="12" '
+             f'text-anchor="middle">codenamann@github: ~$ ./portrait.sh</text>')
+
+# one <text> per row (single color -> no per-char markup, small SVG)
+font_size = CELL_H * 0.86
+for ry, line in enumerate(rows_txt):
+    y = art_top + ry * CELL_H + CELL_H * 0.74
+    row_y = art_top + ry * CELL_H
+    delay = ry * STAGGER
+    safe = html.escape(line)
+    text = (f'<text xml:space="preserve" x="{PAD}" y="{y:.1f}" fill="{INK}" '
+            f'font-size="{font_size:.1f}" textLength="{ART_W:.1f}" lengthAdjust="spacing">{safe}</text>')
+
+    if STATIC:
+        parts.append(text)
+        continue
+
+    parts.append(
+        f'<clipPath id="r{ry}"><rect x="{PAD}" y="{row_y:.1f}" height="{CELL_H}" width="0">'
+        f'<animate attributeName="width" from="0" to="{ART_W:.1f}" begin="{delay:.3f}s" '
+        f'dur="{ROW_DUR:.2f}s" fill="freeze"/></rect></clipPath>'
     )
-    pieces.append("</svg>")
+    parts.append(f'<g clip-path="url(#r{ry})">{text}</g>')
+    parts.append(
+        f'<rect y="{row_y+1:.1f}" width="{CELL_W}" height="{CELL_H-2}" fill="{CURSOR}" opacity="0">'
+        f'<animate attributeName="x" from="{PAD}" to="{PAD+ART_W:.1f}" begin="{delay:.3f}s" '
+        f'dur="{ROW_DUR:.2f}s" fill="freeze"/>'
+        f'<set attributeName="opacity" to="0.85" begin="{delay:.3f}s"/>'
+        f'<set attributeName="opacity" to="0" begin="{delay+ROW_DUR:.3f}s"/></rect>'
+    )
 
-    OUT.write_text("\n".join(pieces) + "\n", encoding="utf-8")
-    print(f"Generated solid high-definition ASCII portrait SVG to {OUT}")
+# status bar with a steady blinking cursor
+status_line_y = TITLEBAR_H + ART_H + PAD * 0.35
+status_y = status_line_y + 19
+parts.append(f'<line x1="0" y1="{status_line_y:.1f}" x2="{CANVAS_W:.1f}" y2="{status_line_y:.1f}" stroke="{FRAME}"/>')
+user_text = "codenamann@github:~$ whoami "
+name_text = "Naman Tiwari"
+parts.append(f'<text x="{PAD}" y="{status_y:.1f}" fill="{TITLE_TEXT}" font-size="13">'
+             f'{user_text}<tspan fill="{INK}">{name_text}</tspan></text>')
+status_chars = len(user_text + name_text + " ")
+parts.append(f'<rect x="{PAD + status_chars * 13 * 0.6:.1f}" y="{status_y-12:.1f}" width="8" height="14" fill="{INK}">'
+             f'<animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.51;1" '
+             f'dur="1s" repeatCount="indefinite"/></rect>')
 
-
-if __name__ == "__main__":
-    main()
+parts.append("</svg>")
+svg = "".join(parts)
+with open(OUT, "w", encoding="utf-8") as f:
+    f.write(svg)
+print("wrote", OUT, len(svg), "bytes;", CANVAS_W, "x", CANVAS_H)
